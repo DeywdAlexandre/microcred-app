@@ -1,0 +1,8 @@
+{
+  "name": "backend-deprecated",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "echo \"\n\n\nERROR: Voce esta no diretorio errado!\n\nPor favor, execute todos os comandos a partir da pasta raiz do projeto.\n\nExecute 'cd ..' para voltar e depois 'npm start'.\n\nA pasta 'backend' nao e mais utilizada e pode ser deletada.\n\n\n\" && exit 1"
+  }
+}

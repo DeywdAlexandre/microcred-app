@@ -1,0 +1,5 @@
+{
+  "name": "MicroCred - Loan Management",
+  "description": "An administrative application for managing clients and loans. It features client registration (without CPF), loan creation, payment tracking (partial and total), and a reliability score system that adjusts based on payment history. A special rule allows single-installment loans to be renewed by paying only the interest.",
+  "requestFramePermissions": []
+}
