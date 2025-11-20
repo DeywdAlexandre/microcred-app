@@ -1,9 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
 const { PrismaLibSql } = require('@prisma/adapter-libsql');
 
-// Validate environment variables
-const dbUrl = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
+// Validate environment variables and trim whitespace/CRLF
+const dbUrl = process.env.TURSO_DATABASE_URL?.trim();
+const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
 
 if (!dbUrl) {
     throw new Error('TURSO_DATABASE_URL is not defined');
