@@ -10,8 +10,14 @@ dotenv.config();
 
 const app = express();
 
-// Allow requests from the frontend development server
-const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+// Allow requests from the frontend development server and production
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://microcred-app.vercel.app',
+    'https://microcred-app-git-main-deywds-projects.vercel.app' // Git branch deployments
+];
 const corsOptions = {
     origin: function (origin, callback) {
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
