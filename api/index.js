@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 
 // Allow requests from the frontend development server
-const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173'];
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'];
 const corsOptions = {
     origin: function (origin, callback) {
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -24,6 +24,10 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
+
+// ... (rest of the file)
+
+
 
 // Auth routes (public)
 app.use('/api/auth', authRoutes);
@@ -380,3 +384,11 @@ app.delete('/api/payments/:id', async (req, res) => {
 });
 
 module.exports = app;
+
+// Start the server if run directly (e.g. node api/index.js)
+if (require.main === module) {
+    const port = process.env.PORT || 8080;
+    app.listen(port, () => {
+        console.log(`✅ Backend server is running on http://localhost:${port}`);
+    });
+}
