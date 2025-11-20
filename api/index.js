@@ -383,6 +383,35 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Inspect URL byte-by-byte
+app.get('/api/inspect-url', (req, res) => {
+    const dbUrl = process.env.TURSO_DATABASE_URL;
+
+    if (!dbUrl) {
+        return res.json({ error: 'TURSO_DATABASE_URL not found' });
+    }
+
+    const bytes = [];
+    for (let i = 0; i < dbUrl.length; i++) {
+        bytes.push({
+            index: i,
+            char: dbUrl[i],
+            code: dbUrl.charCodeAt(i),
+            hex: dbUrl.charCodeAt(i).toString(16)
+        });
+    }
+
+    res.json({
+        length: dbUrl.length,
+        value: dbUrl,
+        bytes: bytes,
+        trimmed: dbUrl.trim(),
+        trimmedLength: dbUrl.trim().length,
+        startsWithLibsql: dbUrl.startsWith('libsql://'),
+        endsWithIo: dbUrl.endsWith('.io')
+    });
+});
+
 // Direct LibSQL Test (bypass Prisma)
 app.get('/api/test-libsql', async (req, res) => {
     try {
