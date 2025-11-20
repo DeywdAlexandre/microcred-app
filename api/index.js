@@ -390,18 +390,27 @@ app.get('/api/debug-status', async (req, res) => {
         const hasToken = !!process.env.TURSO_AUTH_TOKEN;
 
         // Try connection
-        const userCount = await prisma.user.count();
+        let userCount = null;
+        let connectionError = null;
+        try {
+            userCount = await prisma.user.count();
+        } catch (e) {
+            connectionError = e.message;
+        }
 
         res.json({
             status: 'online',
             env: {
                 hasDbUrl: !!dbUrl,
                 dbUrlPrefix: dbUrl ? dbUrl.substring(0, 10) + '...' : null,
-                hasAuthToken: hasToken
+                hasAuthToken: hasToken,
+                // List all keys to see what IS available (security: don't show values)
+                allKeys: Object.keys(process.env).sort()
             },
             database: {
-                connected: true,
-                userCount
+                connected: !connectionError,
+                userCount,
+                error: connectionError
             }
         });
     } catch (error) {
@@ -411,7 +420,8 @@ app.get('/api/debug-status', async (req, res) => {
             stack: error.stack,
             env: {
                 hasDbUrl: !!process.env.TURSO_DATABASE_URL,
-                hasAuthToken: !!process.env.TURSO_AUTH_TOKEN
+                hasAuthToken: !!process.env.TURSO_AUTH_TOKEN,
+                allKeys: Object.keys(process.env).sort()
             }
         });
     }
