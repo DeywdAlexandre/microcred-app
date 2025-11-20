@@ -383,6 +383,47 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Direct LibSQL Test (bypass Prisma)
+app.get('/api/test-libsql', async (req, res) => {
+    try {
+        const { createClient } = require('@libsql/client');
+
+        const dbUrl = process.env.TURSO_DATABASE_URL;
+        const authToken = process.env.TURSO_AUTH_TOKEN;
+
+        if (!dbUrl || !authToken) {
+            return res.status(500).json({
+                status: 'error',
+                error: 'Missing environment variables',
+                hasUrl: !!dbUrl,
+                hasToken: !!authToken
+            });
+        }
+
+        // Try to create client directly
+        const client = createClient({
+            url: dbUrl,
+            authToken: authToken
+        });
+
+        // Try a simple query
+        const result = await client.execute('SELECT 1 as test');
+
+        res.json({
+            status: 'success',
+            message: 'LibSQL connection successful',
+            testQuery: result.rows[0]
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+    }
+});
+
 // Simple Test Endpoint (no Prisma)
 app.get('/api/test-env', (req, res) => {
     res.json({
