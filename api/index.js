@@ -398,6 +398,49 @@ app.get('/api/test-env', (req, res) => {
     });
 });
 
+// Database Connection Test
+app.get('/api/test-db', async (req, res) => {
+    try {
+        // Test 1: Can we connect?
+        await prisma.$connect();
+
+        // Test 2: Can we query the User table?
+        const userCount = await prisma.user.count();
+
+        // Test 3: Can we create a test user?
+        const testEmail = `test-${Date.now()}@example.com`;
+        const testUser = await prisma.user.create({
+            data: {
+                email: testEmail,
+                password: 'test-password-hash',
+                name: 'Test User'
+            }
+        });
+
+        // Test 4: Can we delete the test user?
+        await prisma.user.delete({
+            where: { id: testUser.id }
+        });
+
+        res.json({
+            status: 'success',
+            message: 'All database operations successful',
+            userCount,
+            testUserCreated: testUser.id,
+            testUserDeleted: true
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            code: error.code,
+            meta: error.meta
+        });
+    } finally {
+        await prisma.$disconnect();
+    }
+});
+
 // Debug Endpoint
 app.get('/api/debug-status', async (req, res) => {
     try {
