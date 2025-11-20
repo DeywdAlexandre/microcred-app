@@ -1,0 +1,1 @@
+libsql://microcred-deywdalexandre.aws-us-east-2.turso.io
