@@ -383,6 +383,17 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Global 404 Handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not Found', path: req.originalUrl });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('Global Error:', err);
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
+});
+
 module.exports = app;
 
 // Start the server if run directly (e.g. node api/index.js)
