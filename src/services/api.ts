@@ -48,7 +48,8 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
             window.location.href = '/login';
         }
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(error.error || `Request failed with status ${response.status}`);
+        const errorMessage = error.details ? `${error.error}: ${error.details}` : (error.error || `Request failed with status ${response.status}`);
+        throw new Error(errorMessage);
     }
     const data = await response.json();
     return deserializeDates(data) as T;
