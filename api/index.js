@@ -383,6 +383,40 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Debug Endpoint
+app.get('/api/debug-status', async (req, res) => {
+    try {
+        const dbUrl = process.env.TURSO_DATABASE_URL;
+        const hasToken = !!process.env.TURSO_AUTH_TOKEN;
+
+        // Try connection
+        const userCount = await prisma.user.count();
+
+        res.json({
+            status: 'online',
+            env: {
+                hasDbUrl: !!dbUrl,
+                dbUrlPrefix: dbUrl ? dbUrl.substring(0, 10) + '...' : null,
+                hasAuthToken: hasToken
+            },
+            database: {
+                connected: true,
+                userCount
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            stack: error.stack,
+            env: {
+                hasDbUrl: !!process.env.TURSO_DATABASE_URL,
+                hasAuthToken: !!process.env.TURSO_AUTH_TOKEN
+            }
+        });
+    }
+});
+
 // Global 404 Handler
 app.use((req, res) => {
     res.status(404).json({ error: 'Not Found', path: req.originalUrl });
@@ -391,7 +425,8 @@ app.use((req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error('Global Error:', err);
-    res.status(500).json({ error: 'Internal Server Error', details: err.message });
+    const details = err.message || JSON.stringify(err);
+    res.status(500).json({ error: 'Internal Server Error', details });
 });
 
 module.exports = app;
