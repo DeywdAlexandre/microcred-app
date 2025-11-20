@@ -1,0 +1,93 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Client {
+  id              String    @id @default(uuid())
+  name            String
+  phone           String?
+  email           String?
+  address         String?
+  registrationDate DateTime @default(now())
+  notes           String?
+  score           Float     @default(10.0)
+  
+  loans           Loan[]
+  payments        Payment[]
+  scoreHistory    ScoreHistory[]
+}
+
+model Loan {
+  id               String    @id @default(uuid())
+  clientId         String
+  client           Client    @relation(fields: [clientId], references: [id])
+  type             String    // "single" or "installments"
+  principal        Float
+  interestRate     Float
+  startDate        DateTime  @default(now())
+  dueDate          DateTime?
+  remainingBalance Float
+  status           String    // "active", "paid", "overdue", "partially-paid", "renewed"
+  notes            String?
+  
+  payments         Payment[]
+  renewalHistory   RenewalHistory[]
+  paymentSchedule  Installment[]
+}
+
+model Payment {
+  id              String    @id @default(uuid())
+  loanId          String
+  loan            Loan      @relation(fields: [loanId], references: [id])
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id])
+  date            DateTime  @default(now())
+  amount          Float
+  method          String    // "pix", "cash", "transfer"
+  notes           String?
+  isInterestOnly  Boolean   @default(false)
+  principalPaid   Float?
+  interestPaid    Float?
+}
+
+model ScoreHistory {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  date        DateTime @default(now())
+  reason      String
+  delta       Float
+  scoreBefore Float
+  scoreAfter  Float
+}
+
+model RenewalHistory {
+  id          String   @id @default(uuid())
+  loanId      String
+  loan        Loan     @relation(fields: [loanId], references: [id])
+  date        DateTime @default(now())
+  newDueDate  DateTime
+}
+
+model Installment {
+  id                           String   @id @default(uuid())
+  loanId                       String
+  loan                         Loan     @relation(fields: [loanId], references: [id])
+  installmentNumber            Int
+  dueDate                      DateTime
+  amount                       Float
+  principalAmount              Float
+  interestAmount               Float
+  remainingBalanceAfterPayment Float
+  status                       String   // "pending", "paid", "overdue", "partial"
+  paidAmount                   Float    @default(0)
+  lateFee                      Float    @default(0)
+}

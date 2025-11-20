@@ -8,7 +8,8 @@ import { Client, Loan, LoanStatus, loanStatusUIMap, LoanType, loanTypeUIMap } fr
 import Card from './ui/Card.tsx';
 // Fix: Add .tsx extension
 import Button from './ui/Button.tsx';
-import { format } from 'date-fns';
+import { format, isBefore, startOfDay } from 'date-fns';
+import { getPaymentReminderMessage, openWhatsApp } from '@/utils/whatsapp';
 // Fix: Add .tsx extension
 import RecordPaymentModal from './RecordPaymentModal.tsx';
 
@@ -33,7 +34,7 @@ const statusColors: Record<LoanStatus, string> = {
 const LoansView: React.FC<LoansViewProps> = ({ loans, clients, onRecordPayment, onEditLoan, isEmbedded = false, initialFilter = 'all' }) => {
     const [selectedLoanForPayment, setSelectedLoanForPayment] = useState<Loan | null>(null);
     const [filter, setFilter] = useState<LoanStatus | 'all'>(initialFilter);
-    
+
     useEffect(() => {
         setFilter(initialFilter);
     }, [initialFilter]);
@@ -49,7 +50,7 @@ const LoansView: React.FC<LoansViewProps> = ({ loans, clients, onRecordPayment, 
         if (filter === 'all') return loans;
         return loans.filter(loan => loan.status === filter);
     }, [loans, filter]);
-    
+
     const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
     // Fix: Add .ts extension to inline import() type
@@ -68,11 +69,11 @@ const LoansView: React.FC<LoansViewProps> = ({ loans, clients, onRecordPayment, 
                     </div>
                 )}
             </div>
-            
+
             <div className="flex flex-wrap gap-2 mb-4">
-                {(['all', ...Object.keys(loanStatusUIMap)] as ('all'|LoanStatus)[]).map(statusKey => (
-                    <button 
-                        key={statusKey} 
+                {(['all', ...Object.keys(loanStatusUIMap)] as ('all' | LoanStatus)[]).map(statusKey => (
+                    <button
+                        key={statusKey}
                         onClick={() => setFilter(statusKey)}
                         className={`px-3 py-1 text-sm rounded-full transition-colors ${filter === statusKey ? 'bg-brand-primary text-white' : 'bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300'}`}
                     >
@@ -113,29 +114,39 @@ const LoansView: React.FC<LoansViewProps> = ({ loans, clients, onRecordPayment, 
                                 } else {
                                     dueDateContent = loan.dueDate ? format(loan.dueDate, 'dd/MM/yyyy') : 'N/A';
                                 }
+                                const client = clientMap[loan.clientId];
 
                                 return (
-                                <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
-                                    {!isEmbedded && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {clientMap[loan.clientId]?.name || 'N/A'}
+                                    <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                                        {!isEmbedded && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                {clientMap[loan.clientId]?.name || 'N/A'}
+                                            </td>
+                                        )}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{currencyFormatter.format(loan.principal)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800 dark:text-gray-100">{currencyFormatter.format(loan.remainingBalance)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{dueDateContent}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[loan.status]}`}>
+                                                {loanStatusUIMap[loan.status]}
+                                            </span>
                                         </td>
-                                    )}
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{currencyFormatter.format(loan.principal)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800 dark:text-gray-100">{currencyFormatter.format(loan.remainingBalance)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{dueDateContent}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[loan.status]}`}>
-                                            {loanStatusUIMap[loan.status]}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 flex items-center">
-                                        <Button size="sm" variant="secondary" onClick={() => setSelectedLoanForPayment(loan)} disabled={loan.status === 'paid'}>
-                                            Receber
-                                        </Button>
-                                         <button onClick={() => onEditLoan(loan)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Editar</button>
-                                    </td>
-                                </tr>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => onEditLoan(loan)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                <button onClick={() => setSelectedLoanForPayment(loan)} className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300" disabled={loan.status === 'paid'}>Pagar</button>
+                                                {client && client.phone && (
+                                                    <button
+                                                        onClick={() => openWhatsApp(client.phone, getPaymentReminderMessage(client, loan))}
+                                                        className="text-green-500 hover:text-green-700"
+                                                        title="Enviar WhatsApp"
+                                                    >
+                                                        WhatsApp
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
                                 )
                             })
                         ) : (

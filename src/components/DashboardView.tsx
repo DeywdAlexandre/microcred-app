@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 // Fix: Add .ts extension
-import { Client, Loan, LoanStatus, Payment } from '@/types.ts';
+import { Loan, Client, Payment, LoanStatus } from '@/types';
 // Fix: Add .tsx extension
 import Card from './ui/Card.tsx';
-import { format, isSameMonth, isSameYear, differenceInDays, isBefore, startOfDay } from 'date-fns';
+import { format, isSameMonth, isSameYear, differenceInDays, isBefore, startOfDay, addDays } from 'date-fns';
+import { getPaymentReminderMessage, openWhatsApp } from '@/utils/whatsapp';
 
 interface DashboardViewProps {
     loans: Loan[];
@@ -21,7 +22,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: string; 
             <p className="text-2xl font-bold mt-1">{value}</p>
         </div>
         <div className="opacity-80">
-             <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
             </svg>
         </div>
@@ -38,7 +39,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
     }, [appName]);
 
     const handleTitleBlur = () => {
-        setAppName(currentTitle || "MicroCred"); 
+        setAppName(currentTitle || "MicroCred");
         setIsEditingTitle(false);
     };
 
@@ -52,7 +53,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
     };
 
     const totalLoaned = loans.reduce((sum, loan) => sum + loan.principal, 0);
-    
+
     const totalLoanedThisMonth = loans
         .filter(loan => loan.startDate && isSameMonth(loan.startDate, new Date()) && isSameYear(loan.startDate, new Date()))
         .reduce((sum, loan) => sum + loan.principal, 0);
@@ -74,7 +75,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
 
 
     const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-    
+
     const now = startOfDay(new Date());
 
     const upcomingLoans = loans.filter(loan => {
@@ -115,8 +116,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
                 {!isEditingTitle && (
                     <button onClick={() => setIsEditingTitle(true)} className="ml-2 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity absolute right-0 top-1/2 -translate-y-1/2 transform translate-x-full" aria-label="Editar nome da aplicação">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                          <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                            <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
                         </svg>
                     </button>
                 )}
@@ -137,15 +138,30 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
                                 {upcomingLoans.map(loan => {
                                     const client = clients.find(c => c.id === loan.clientId);
                                     return (
-                                        <li key={loan.id} className="py-3 flex justify-between items-center">
-                                            <div>
-                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{client?.name || 'N/A'}</p>
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">{currencyFormatter.format(loan.remainingBalance)}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-sm font-semibold text-alert-warning-text">Vence em: {loan.dueDate ? format(loan.dueDate, 'dd/MM/yyyy') : 'N/A'}</p>
-                                            </div>
-                                        </li>
+                                        <li key={loan.id} className="py-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-medium text-slate-800 dark:text-white">{client?.name || 'Cliente Desconhecido'}</p>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Vence em: {loan.dueDate ? format(new Date(loan.dueDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <span className="font-bold text-red-600 dark:text-red-400">
+                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(loan.remainingBalance)}
+                                                    </span>
+                                                    {client && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation(); // Prevent Card onClick from firing
+                                                                openWhatsApp(client.phone, getPaymentReminderMessage(client, loan));
+                                                            }}
+                                                            className="text-xs bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                                            title="Enviar cobrança via WhatsApp"
+                                                        >
+                                                            <span>WhatsApp</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>    </li>
                                     )
                                 })}
                             </ul>
@@ -157,21 +173,37 @@ const DashboardView: React.FC<DashboardViewProps> = ({ loans, clients, payments,
 
                 <div onClick={() => onViewLoans('overdue')} className="cursor-pointer hover:shadow-lg transition-shadow duration-200 rounded-xl">
                     <Card title="Empréstimos em Atraso">
-                         {overdueLoans.length > 0 ? (
+                        {overdueLoans.length > 0 ? (
                             <ul className="divide-y divide-gray-200 dark:divide-slate-700">
                                 {overdueLoans.map(loan => {
                                     const client = clients.find(c => c.id === loan.clientId);
                                     return (
-                                        <li key={loan.id} className="py-3 flex justify-between items-center">
-                                            <div>
-                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{client?.name || 'N/A'}</p>
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">{currencyFormatter.format(loan.remainingBalance)}</p>
-                                                 <p className="text-xs text-gray-500 dark:text-gray-400">Venceu em: {loan.dueDate ? format(loan.dueDate, 'dd/MM/yyyy') : 'N/A'}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-alert-danger-bg dark:bg-rose-500/30 text-alert-danger-text dark:text-rose-300">
-                                                    {loan.daysOverdue} {loan.daysOverdue === 1 ? 'dia atrasado' : 'dias atrasado'}
-                                                </span>
+                                        <li key={loan.id} className="py-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-medium text-slate-800 dark:text-white">{client?.name || 'N/A'}</p>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">{currencyFormatter.format(loan.remainingBalance)}</p>
+                                                    <p className="text-xs text-red-500 dark:text-red-400 font-semibold">
+                                                        {loan.daysOverdue} {loan.daysOverdue === 1 ? 'dia atrasado' : 'dias atrasado'}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                        Venceu: {loan.dueDate ? format(new Date(loan.dueDate), 'dd/MM/yyyy') : 'N/A'}
+                                                    </span>
+                                                    {client && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openWhatsApp(client.phone, getPaymentReminderMessage(client, loan));
+                                                            }}
+                                                            className="text-xs bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                                            title="Cobrar via WhatsApp"
+                                                        >
+                                                            <span>Cobrar</span>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </li>
                                     )

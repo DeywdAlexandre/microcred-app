@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 // Fix: Add .ts extension
-import { Client, Loan, Payment, AppView, LoanType, paymentMethodUIMap, Installment, LoanStatus, Settings, Notification, InstallmentStatus, ScoreHistory } from '@/types.ts';
+import { Client, Loan, Payment, AppView, LoanType, LoanStatus, Settings, Notification } from '@/types.ts';
 // Fix: Add .tsx extension
 import Sidebar from '@/components/Sidebar.tsx';
 // Fix: Add .tsx extension
@@ -33,220 +33,67 @@ import SettingsView from '@/components/SettingsView.tsx';
 import ImportClientsModal from '@/components/ImportClientsModal.tsx';
 // Fix: Add .tsx extension
 import ImportLoansModal from '@/components/ImportLoansModal.tsx'; // Import the new modal
-import { addDays, subDays, format, addMonths, differenceInDays, startOfDay, isBefore } from 'date-fns';
+import { addMonths, differenceInDays, startOfDay, isBefore } from 'date-fns';
+import { useClients } from './hooks/useClients';
+import { useLoans } from './hooks/useLoans';
+import { usePayments } from './hooks/usePayments';
 // Fix: Add .tsx extension
 import NotificationsPopover from '@/components/NotificationsPopover.tsx';
 
-// --- MOCK DATA FOR INITIAL LOAD ---
-const getInitialClients = (): Client[] => [
-    { id: 'c1', name: 'John Doe', phone: '555-1234', email: 'john.doe@email.com', address: '123 Main St', registrationDate: subDays(new Date(), 45), notes: '', score: 9.5, scoreHistory: [{ date: subDays(new Date(), 45), reason: 'Initial Score', delta: 10, scoreBefore: 0, scoreAfter: 10 }] },
-    { id: 'c2', name: 'Jane Smith', phone: '555-5678', email: 'jane.smith@email.com', address: '456 Oak Ave', registrationDate: subDays(new Date(), 120), notes: 'Reliable payer', score: 10, scoreHistory: [{ date: subDays(new Date(), 120), reason: 'Initial Score', delta: 10, scoreBefore: 0, scoreAfter: 10 }] },
-];
-
-const { getInitialLoans, getInitialPayments } = (() => {
-    const loans: Loan[] = [];
-    const payments: Payment[] = [];
-    const now = new Date();
-
-    const loan1StartDate = subDays(now, 15);
-    const loan1DueDate = addDays(loan1StartDate, 30);
-    const loan1Principal = 1000;
-    const loan1InterestRate = 10;
-    const loan1Remaining = loan1Principal * (1 + loan1InterestRate / 100);
-    loans.push({
-        id: 'l1',
-        clientId: 'c1',
-        type: LoanType.SINGLE,
-        principal: loan1Principal,
-        interestRate: loan1InterestRate,
-        startDate: loan1StartDate,
-        dueDate: loan1DueDate,
-        remainingBalance: loan1Remaining,
-        status: 'active',
-        paymentHistory: [],
-        renewalHistory: [],
-        notes: 'Standard 30-day loan.'
-    });
-
-    const loan2StartDate = subDays(now, 40);
-    const loan2DueDate = addDays(loan2StartDate, 30);
-    const loan2Principal = 500;
-    const loan2InterestRate = 12;
-    const loan2Remaining = loan2Principal * (1 + loan2InterestRate / 100);
-    loans.push({
-        id: 'l2',
-        clientId: 'c2',
-        type: LoanType.SINGLE,
-        principal: loan2Principal,
-        interestRate: loan2InterestRate,
-        startDate: loan2StartDate,
-        dueDate: loan2DueDate,
-        remainingBalance: loan2Remaining,
-        status: 'overdue',
-        paymentHistory: [],
-        renewalHistory: [],
-        notes: 'Client has been contacted.'
-    });
-
-    const loan3Id = 'l3';
-    const loan3Principal = 1200;
-    const loan3InterestRate = 8;
-    const loan3Installments = 3;
-    const loan3StartDate = subDays(now, 100);
-    
-    const i = loan3InterestRate / 100;
-    const pmt = loan3Principal * (i * Math.pow(1 + i, loan3Installments)) / (Math.pow(1 + i, loan3Installments) - 1);
-
-    const loan3PaymentSchedule: Installment[] = [];
-    let currentBalance = loan3Principal;
-    for (let k = 1; k <= loan3Installments; k++) {
-        const interestAmount = currentBalance * i;
-        const principalAmount = pmt - interestAmount;
-        currentBalance -= principalAmount;
-        loan3PaymentSchedule.push({
-            installmentNumber: k,
-            dueDate: addMonths(loan3StartDate, k),
-            amount: pmt,
-            principalAmount: principalAmount,
-            interestAmount: interestAmount,
-            remainingBalanceAfterPayment: currentBalance,
-            status: 'paid',
-            paidAmount: pmt,
-            lateFee: 0,
-        });
-    }
-
-    loans.push({
-        id: loan3Id,
-        clientId: 'c2',
-        type: LoanType.INSTALLMENTS,
-        principal: loan3Principal,
-        interestRate: loan3InterestRate,
-        paymentSchedule: loan3PaymentSchedule,
-        startDate: loan3StartDate,
-        dueDate: loan3PaymentSchedule[loan3PaymentSchedule.length - 1].dueDate,
-        remainingBalance: 0,
-        status: 'paid',
-        paymentHistory: ['p1', 'p2', 'p3'],
-        renewalHistory: [],
-        notes: 'Paid off successfully.'
-    });
-    
-    payments.push({ id: 'p1', loanId: loan3Id, clientId: 'c2', date: addMonths(loan3StartDate, 1), amount: pmt, method: 'pix', notes: 'Installment 1', principalPaid: loan3PaymentSchedule[0].principalAmount, interestPaid: loan3PaymentSchedule[0].interestAmount });
-    payments.push({ id: 'p2', loanId: loan3Id, clientId: 'c2', date: addMonths(loan3StartDate, 2), amount: pmt, method: 'pix', notes: 'Installment 2', principalPaid: loan3PaymentSchedule[1].principalAmount, interestPaid: loan3PaymentSchedule[1].interestAmount });
-    payments.push({ id: 'p3', loanId: loan3Id, clientId: 'c2', date: addMonths(loan3StartDate, 3), amount: pmt, method: 'pix', notes: 'Installment 3', principalPaid: loan3PaymentSchedule[2].principalAmount, interestPaid: loan3PaymentSchedule[2].interestAmount });
-    
-    const loan4Id = 'l4';
-    const loan4Principal = 750;
-    const loan4InterestRate = 15;
-    const loan4StartDate = subDays(now, 20);
-    const loan4DueDate = addDays(loan4StartDate, 30);
-    const loan4Total = loan4Principal * (1 + loan4InterestRate/100);
-    loans.push({
-        id: loan4Id,
-        clientId: 'c1',
-        type: LoanType.SINGLE,
-        principal: loan4Principal,
-        interestRate: loan4InterestRate,
-        startDate: loan4StartDate,
-        dueDate: loan4DueDate,
-        remainingBalance: loan4Total - 200,
-        status: 'partially-paid',
-        paymentHistory: ['p4'],
-        renewalHistory: [],
-        notes: 'Client paid a portion upfront.'
-    });
-    payments.push({id: 'p4', loanId: loan4Id, clientId: 'c1', date: subDays(now, 19), amount: 200, method: 'cash', notes: 'Partial payment.'});
-
-
-    return { getInitialLoans: () => loans, getInitialPayments: () => payments };
-})();
-
+// Mock data removed - now using database via API
 
 const LOCAL_STORAGE_KEYS = {
-    clients: 'microcred_clients',
-    loans: 'microcred_loans',
-    payments: 'microcred_payments',
     settings: 'microcred_settings',
     appName: 'microcred_appName',
-    googleConnected: 'microcred_google_connected',
-    googleEmail: 'microcred_google_email',
-    googleSheetId: 'microcred_google_sheet_id',
-    googleSheetName: 'microcred_google_sheet_name',
-    autoSync: 'microcred_auto_sync',
-    lastSync: 'microcred_last_sync',
 };
 
-function deserializeWithDates<T>(jsonString: string | null): T | null {
-    if (!jsonString) return null;
-    
-    try {
-        const data = JSON.parse(jsonString);
-        const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
 
-        function recurse(obj: any) {
-            if (!obj || typeof obj !== 'object') return;
-            for (const key in obj) {
-                if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                    const value = obj[key];
-                    if (typeof value === 'string' && isoDateRegex.test(value)) {
-                        obj[key] = new Date(value);
-                    } else if (typeof value === 'object') {
-                        recurse(value);
-                    }
-                }
-            }
-        }
-        recurse(data);
-        return data as T;
-    } catch (error) {
-        console.error("Failed to parse or deserialize data from localStorage", error);
-        return null;
-    }
-}
 
 const App: React.FC = () => {
-    const [clients, setClients] = useState<Client[]>(() => {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.clients);
-        return deserializeWithDates<Client[]>(saved) || getInitialClients();
-    });
-    const [loans, setLoans] = useState<Loan[]>(() => {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.loans);
-        return deserializeWithDates<Loan[]>(saved) || getInitialLoans();
-    });
-    const [payments, setPayments] = useState<Payment[]>(() => {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.payments);
-        return deserializeWithDates<Payment[]>(saved) || getInitialPayments();
-    });
+    // Use custom hooks for data management
+    const { clients, loadClients, addClient, updateClient, importClients } = useClients();
+    const { loans, loadLoans, addLoan, updateLoan, deleteLoan, importLoans } = useLoans();
+    const { payments, loadPayments, processPayment } = usePayments();
     const [settings, setSettings] = useState<Settings>(() => {
         const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.settings);
-        return saved ? JSON.parse(saved) : { defaultInterestRate: 10, defaultSingleLoanTermDays: 30, lateFeeRate: 2 };
+        return saved ? JSON.parse(saved) : {
+            defaultInterestRate: 10,
+            defaultSingleLoanTermDays: 30,
+            lateFeeRate: 5
+        };
     });
     const [appName, setAppName] = useState<string>(() => {
         return localStorage.getItem(LOCAL_STORAGE_KEYS.appName) || "MicroCred";
     });
-    
-    const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.googleConnected) === 'true');
-    const [googleUserEmail, setGoogleUserEmail] = useState<string | null>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.googleEmail));
-    const [googleSheetId, setGoogleSheetId] = useState<string | null>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.googleSheetId));
-    const [googleSheetName, setGoogleSheetName] = useState<string | null>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.googleSheetName));
-    const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.autoSync) === 'true');
-    const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(() => localStorage.getItem(LOCAL_STORAGE_KEYS.lastSync));
+
+
 
     useEffect(() => {
-        localStorage.setItem(LOCAL_STORAGE_KEYS.clients, JSON.stringify(clients));
-        localStorage.setItem(LOCAL_STORAGE_KEYS.loans, JSON.stringify(loans));
-        localStorage.setItem(LOCAL_STORAGE_KEYS.payments, JSON.stringify(payments));
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        try {
+            await Promise.all([
+                loadClients(),
+                loadLoans(),
+                loadPayments()
+            ]);
+        } catch (error: any) {
+            console.error("Failed to load data", error);
+        }
+    };
+
+    // Save settings to localStorage (keep settings local for now or move to DB later)
+    useEffect(() => {
         localStorage.setItem(LOCAL_STORAGE_KEYS.settings, JSON.stringify(settings));
+    }, [settings]);
+
+    useEffect(() => {
         localStorage.setItem(LOCAL_STORAGE_KEYS.appName, appName);
-        
-        localStorage.setItem(LOCAL_STORAGE_KEYS.googleConnected, String(isGoogleConnected));
-        googleUserEmail ? localStorage.setItem(LOCAL_STORAGE_KEYS.googleEmail, googleUserEmail) : localStorage.removeItem(LOCAL_STORAGE_KEYS.googleEmail);
-        googleSheetId ? localStorage.setItem(LOCAL_STORAGE_KEYS.googleSheetId, googleSheetId) : localStorage.removeItem(LOCAL_STORAGE_KEYS.googleSheetId);
-        googleSheetName ? localStorage.setItem(LOCAL_STORAGE_KEYS.googleSheetName, googleSheetName) : localStorage.removeItem(LOCAL_STORAGE_KEYS.googleSheetName);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.autoSync, String(isAutoSyncEnabled));
-        lastSyncTimestamp ? localStorage.setItem(LOCAL_STORAGE_KEYS.lastSync, lastSyncTimestamp) : localStorage.removeItem(LOCAL_STORAGE_KEYS.lastSync);
-    }, [clients, loans, payments, settings, appName, isGoogleConnected, googleUserEmail, googleSheetId, googleSheetName, isAutoSyncEnabled, lastSyncTimestamp]);
+    }, [appName]);
+
+
 
     const [currentView, setCurrentView] = useState<AppView>('dashboard');
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -269,169 +116,44 @@ const App: React.FC = () => {
         }
         return loan;
     }), [loans]);
-    
-    useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('auth') === 'success') {
-            setIsGoogleConnected(true);
-            setGoogleUserEmail('usuario@exemplo.com'); 
-            setCurrentView('settings');
-            window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (urlParams.get('auth') === 'error') {
-            alert('Falha na autenticação com o Google.');
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
-    }, []);
 
-    const updateSyncTimestamp = () => {
-        const timestamp = new Date().toISOString();
-        setLastSyncTimestamp(timestamp);
+
+
+
+
+    const handleAddClient = async (clientData: Omit<Client, 'id'>) => {
+        try {
+            await addClient(clientData);
+            setIsAddClientModalOpen(false);
+        } catch (error: any) {
+            alert("Erro ao criar cliente");
+        }
     };
 
-    const handleGoogleLogout = useCallback(async () => {
+    const handleUpdateClient = async (updatedClient: Client) => {
         try {
-            await fetch(`/api/logout`, { method: 'POST' });
-        } catch (error) {
-            console.error("Failed to logout on backend, but proceeding with frontend logout:", error);
-        } finally {
-            setIsGoogleConnected(false);
-            setGoogleUserEmail(null);
-            setGoogleSheetId(null);
-            setGoogleSheetName(null);
-            setIsAutoSyncEnabled(false);
-            setLastSyncTimestamp(null);
+            await updateClient(updatedClient);
+            setEditingClient(null);
+        } catch (error: any) {
+            alert("Erro ao atualizar cliente");
         }
-    }, []);
+    };
 
-    const handleCreateGoogleSheet = useCallback(async () => {
+    const handleImportClients = useCallback(async (importedClientsData: Omit<Client, 'id' | 'registrationDate' | 'score' | 'scoreHistory'>[]) => {
         try {
-            const response = await fetch(`/api/sheets/create`, { method: 'POST' });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to create sheet');
-            }
-            const data = await response.json();
-            setGoogleSheetId(data.sheetId);
-            setGoogleSheetName(data.sheetName);
-        } catch (error) {
-            console.error("Failed to create Google Sheet:", error);
-            alert(`Não foi possível criar a planilha: ${error.message}`);
-            throw error;
+            const count = await importClients(importedClientsData);
+            setIsImportClientsModalOpen(false);
+            alert(`${count} cliente(s) importado(s) com sucesso!`);
+        } catch (error: any) {
+            alert("Erro ao importar clientes.");
         }
-    }, []);
+    }, [importClients]);
 
-    const handleSyncToSheet = useCallback(async () => {
-        if (!googleSheetId) {
-            alert("Nenhuma planilha conectada. Crie uma nova primeiro.");
-            return;
-        }
-        try {
-            const response = await fetch(`/api/sheets/sync-up`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clients, loans, payments, sheetId: googleSheetId })
-            });
-            if (!response.ok) {
-                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Sync failed');
-            }
-            updateSyncTimestamp();
-        } catch (error) {
-            console.error("Failed to sync to sheet:", error);
-            alert(`Falha ao enviar dados para a planilha: ${error.message}`);
-            throw error;
-        }
-    }, [googleSheetId, clients, loans, payments]);
-
-    const handleSyncFromSheet = useCallback(async () => {
-        if (!googleSheetId) {
-            alert("Nenhuma planilha conectada.");
-            return;
-        }
-        if (!window.confirm("Isso substituirá todos os dados locais por aqueles da planilha. Deseja continuar?")) {
-            return;
-        }
-        try {
-            const response = await fetch(`/api/sheets/sync-down?sheetId=${googleSheetId}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Sync failed');
-            }
-            const data = await response.json();
-
-            const deserializedClients = deserializeWithDates<Client[]>(JSON.stringify(data.clients));
-            const deserializedLoans = deserializeWithDates<Loan[]>(JSON.stringify(data.loans));
-            const deserializedPayments = deserializeWithDates<Payment[]>(JSON.stringify(data.payments));
-
-            setClients(deserializedClients || []);
-            setLoans(deserializedLoans || []);
-            setPayments(deserializedPayments || []);
-            
-            updateSyncTimestamp();
-            alert("Dados recebidos da planilha com sucesso!");
-        } catch (error) {
-            console.error("Failed to sync from sheet:", error);
-            alert(`Falha ao receber dados da planilha: ${error.message}`);
-            throw error;
-        }
-    }, [googleSheetId]);
-
-    const handleToggleAutoSync = useCallback((enabled: boolean) => {
-        if (enabled && !googleSheetId) {
-            return;
-        }
-        setIsAutoSyncEnabled(enabled);
-    }, [googleSheetId]);
-
-    useEffect(() => {
-        let isMounted = true;
-        const autoSync = async () => {
-             if (isGoogleConnected && isAutoSyncEnabled && googleSheetId) {
-                console.log("Auto-sync enabled. Fetching data from Google Sheets on app load.");
-                try {
-                    await handleSyncFromSheet();
-                } catch (e) {
-                    if (isMounted) {
-                       console.error("Auto-sync failed on load.", e);
-                       alert("A sincronização automática ao iniciar falhou. Verifique o console para mais detalhes.");
-                    }
-                }
-            }
-        };
-        autoSync();
-        return () => { isMounted = false };
-    }, [isGoogleConnected, isAutoSyncEnabled, googleSheetId]);
-
-    const handleAddClient = useCallback((clientData: Omit<Client, 'id'>) => {
-        const newClient: Client = { id: `c${Date.now()}`, ...clientData };
-        setClients(prev => [...prev, newClient]);
-        setIsAddClientModalOpen(false);
-    }, []);
-    
-    const handleUpdateClient = useCallback((updatedClient: Client) => {
-        setClients(prevClients => prevClients.map(client => client.id === updatedClient.id ? updatedClient : client));
-        setEditingClient(null);
-    }, []);
-
-    const handleImportClients = useCallback((importedClients: Omit<Client, 'id' | 'registrationDate' | 'score' | 'scoreHistory'>[]) => {
-        const newClients: Client[] = importedClients.map((clientData, index) => ({
-            id: `c${Date.now() + index}`,
-            ...clientData,
-            registrationDate: new Date(),
-            score: 10.0,
-            scoreHistory: [{ date: new Date(), reason: 'Initial Score', delta: 10, scoreBefore: 0, scoreAfter: 10 }]
-        }));
-        
-        setClients(prev => [...prev, ...newClients]);
-        setIsImportClientsModalOpen(false);
-        alert(`${newClients.length} cliente(s) importado(s) com sucesso!`);
-    }, []);
-
-    const handleImportLoans = useCallback((importedData: Record<string, any>[]) => {
-        const newClientsToCreate: Client[] = [];
-        const newLoansToCreate: Loan[] = [];
+    const handleImportLoans = useCallback(async (importedData: Record<string, any>[]) => {
+        const newClientsToCreate: any[] = [];
+        const newLoansToCreate: Omit<Loan, 'id'>[] = [];
         const existingClientsMap = new Map<string, Client>(clients.map(c => [c.name.trim().toLowerCase(), c]));
-        
+
         const calculateDueDateFromDay = (dayOfMonth: number): Date => {
             const now = new Date();
             const currentDay = now.getDate();
@@ -454,45 +176,45 @@ const App: React.FC = () => {
             } else {
                 const newClientInBatch = newClientsToCreate.find(nc => nc.name.toLowerCase() === clientName.toLowerCase());
                 if (newClientInBatch) {
-                    clientId = newClientInBatch.id;
+                    clientId = newClientInBatch.id; // Use temporary ID for batch
                 } else {
-                    clientId = `c_import_${Date.now() + index}`;
-                    const newClient: Client = {
-                        id: clientId, name: clientName, email: '', phone: '',
+                    clientId = `c_import_${Date.now() + index}`; // Temporary ID
+                    const newClient: Omit<Client, 'id'> = {
+                        name: clientName, email: '', phone: '',
                         registrationDate: new Date(), score: 10.0,
                         scoreHistory: [{ date: new Date(), reason: 'Initial Score', delta: 10, scoreBefore: 0, scoreAfter: 10 }],
                         notes: 'Cliente importado via planilha.', address: ''
                     };
                     newClientsToCreate.push(newClient);
-                    existingClientsMap.set(newClient.name.toLowerCase(), newClient);
+                    existingClientsMap.set(newClient.name.toLowerCase(), { ...newClient, id: clientId }); // Add to map with temp ID
                 }
             }
-            
+
             const principalStr = (row['valor_emprestado'] || '0').replace(/[^0-9,.]/g, '').replace('.', '').replace(',', '.');
             const principal = parseFloat(principalStr);
-            
+
             const interestRateStr = (row['taxa_juros'] || '0').replace(/[^0-9,.]/g, '').replace(',', '.');
             const interestRate = parseFloat(interestRateStr);
 
             const dueDayStr = (row['dia_vencimento'] || '').trim();
             const dueDay = parseInt(dueDayStr, 10);
-            
+
             if (isNaN(principal) || principal <= 0 || isNaN(interestRate) || isNaN(dueDay)) {
                 console.warn(`Skipping row for client ${clientName} due to invalid loan data.`);
                 return;
             }
-            
+
             const dueDate = calculateDueDateFromDay(dueDay);
             const remainingBalance = principal * (1 + (interestRate / 100));
-            
+
             let status: LoanStatus = 'active';
             const statusStr = (row['status'] || '').trim().toLowerCase();
             if (statusStr === 'atrasado') {
                 status = 'overdue';
             }
 
-            const newLoan: Loan = {
-                id: `l_import_${Date.now() + index}`, clientId, type: LoanType.SINGLE,
+            const newLoan: Omit<Loan, 'id'> = {
+                clientId, type: LoanType.SINGLE,
                 principal, interestRate, startDate: new Date(), dueDate, remainingBalance,
                 status, paymentHistory: [], renewalHistory: [],
                 notes: `Importado via planilha. Vencimento original no dia ${dueDay}.`
@@ -500,94 +222,84 @@ const App: React.FC = () => {
             newLoansToCreate.push(newLoan);
         });
 
-        if (newClientsToCreate.length > 0) {
-            setClients(prev => [...prev, ...newClientsToCreate]);
-        }
-        if (newLoansToCreate.length > 0) {
-            setLoans(prev => [...prev, ...newLoansToCreate]);
-        }
-        setIsImportLoansModalOpen(false);
-        if (newLoansToCreate.length > 0) {
-            alert(`${newLoansToCreate.length} empréstimo(s) importado(s) com sucesso! ${newClientsToCreate.length} novo(s) cliente(s) criado(s).`);
-        } else {
-            alert('Nenhum empréstimo válido encontrado para importar.');
-        }
-    }, [clients]);
+        try {
+            if (newClientsToCreate.length > 0) {
+                await Promise.all(newClientsToCreate.map(client => addClient(client)));
+            }
 
-    const handleAddLoan = useCallback((loanData: Omit<Loan, 'id'>) => {
-        const newLoan: Loan = { id: `l${Date.now()}`, ...loanData };
-        setLoans(prev => [...prev, newLoan]);
-        setIsAddLoanModalOpen(false);
-    }, []);
+            // Map temporary client IDs to actual IDs for loans
+            const finalLoansToCreate = newLoansToCreate.map(loan => {
+                const tempClientId = loan.clientId;
+                const actualClient = clients.find(c => c.id === tempClientId);
+                return { ...loan, clientId: actualClient ? actualClient.id : tempClientId };
+            });
 
-    const handleUpdateLoan = useCallback((updatedLoan: Loan) => {
-        setLoans(prev => prev.map(l => l.id === updatedLoan.id ? updatedLoan : l));
-        setEditingLoan(null);
-    }, []);
+            if (finalLoansToCreate.length > 0) {
+                await Promise.all(finalLoansToCreate.map(loan => addLoan(loan)));
+            }
 
-    const handleDeleteLoan = useCallback((loanId: string) => {
-        const loanToDelete = loans.find(l => l.id === loanId);
-        if (loanToDelete && loanToDelete.paymentHistory.length === 0) {
-            setLoans(prev => prev.filter(l => l.id !== loanId));
+            setIsImportLoansModalOpen(false);
+            if (finalLoansToCreate.length > 0) {
+                alert(`${finalLoansToCreate.length} empréstimo(s) importado(s) com sucesso! ${newClientsToCreate.length} novo(s) cliente(s) criado(s).`);
+            } else {
+                alert('Nenhum empréstimo válido encontrado para importar.');
+            }
+        } catch (error: any) {
+            console.error("Error importing loans", error);
+            alert("Erro ao importar empréstimos.");
+        }
+    }, [clients, addClient, addLoan]);
+
+    const handleAddLoan = async (loanData: Omit<Loan, 'id'>) => {
+        try {
+            await addLoan(loanData);
+            setIsAddLoanModalOpen(false);
+        } catch (error: any) {
+            alert("Erro ao criar empréstimo");
+        }
+    };
+
+    const handleUpdateLoan = async (updatedLoan: Loan) => {
+        try {
+            await updateLoan(updatedLoan);
             setEditingLoan(null);
-        } else {
-            alert("Não é possível excluir um empréstimo que já possui pagamentos registrados.");
+        } catch (error: any) {
+            alert("Erro ao atualizar empréstimo");
         }
-    }, [loans]);
+    };
 
-    const handleRecordPayment = useCallback((paymentData: Omit<Payment, 'id'>, loanId: string, isInterestOnlyPayment: boolean) => {
-        const newPayment: Payment = { id: `p${Date.now()}`, ...paymentData };
-        setPayments(prev => [...prev, newPayment]);
-
-        const loan = loans.find(l => l.id === loanId);
-        if (!loan) return;
-        const client = clients.find(c => c.id === loan.clientId);
-        if (!client) return;
-
-        let updatedLoan = { ...loan };
-        let updatedClient = { ...client };
-        const scoreChangeReason = `Pagamento de ${newPayment.amount.toFixed(2)}`;
-        let scoreDelta = 0;
-
-        const daysDiff = loan.dueDate ? differenceInDays(startOfDay(new Date()), startOfDay(loan.dueDate)) : 0;
-        if (daysDiff <= 0) scoreDelta = 0.5;
-        else scoreDelta = -Math.min(1, daysDiff * 0.1);
-
-        if (loan.type === LoanType.SINGLE && isInterestOnlyPayment) {
-            const interestAmount = loan.principal * (loan.interestRate / 100);
-            if (Math.abs(newPayment.amount - interestAmount) < 0.01) {
-                const newDueDate = addDays(loan.dueDate!, settings.defaultSingleLoanTermDays);
-                updatedLoan.status = 'renewed';
-                updatedLoan.dueDate = newDueDate;
-                updatedLoan.renewalHistory = [...(loan.renewalHistory || []), { date: new Date(), newDueDate }];
-                newPayment.isInterestOnly = true;
-                scoreDelta = 1.0;
-            } else {
-                alert("O valor pago não corresponde exatamente ao valor dos juros para renovação.");
-                setPayments(prev => prev.filter(p => p.id !== newPayment.id));
-                return;
-            }
-        } else {
-            updatedLoan.remainingBalance -= newPayment.amount;
-            if (updatedLoan.remainingBalance < 0.01) {
-                updatedLoan.remainingBalance = 0;
-                updatedLoan.status = 'paid';
-            } else {
-                updatedLoan.status = 'partially-paid';
-            }
+    const handleDeleteLoan = useCallback(async (loanId: string) => {
+        try {
+            await deleteLoan(loanId);
+        } catch (error: any) {
+            alert("Erro ao deletar empréstimo");
         }
-        
-        updatedLoan.paymentHistory = [...loan.paymentHistory, newPayment.id];
-        const oldScore = updatedClient.score;
-        const newScore = Math.max(0, Math.min(10, oldScore + scoreDelta));
-        updatedClient.score = newScore;
-        updatedClient.scoreHistory = [...(client.scoreHistory || []), { date: new Date(), reason: scoreChangeReason, delta: scoreDelta, scoreBefore: oldScore, scoreAfter: newScore }];
-        
-        setLoans(prev => prev.map(l => l.id === loanId ? updatedLoan : l));
-        setClients(prev => prev.map(c => c.id === client.id ? updatedClient : c));
-        setIsQuickPaymentModalOpen(false);
-    }, [loans, clients, settings.defaultSingleLoanTermDays]);
-    
+    }, [deleteLoan]);
+
+    const handleRecordPayment = async (paymentData: Omit<Payment, 'id'>, loanId: string, isInterestOnlyPayment: boolean) => {
+        try {
+            const result = await processPayment({
+                loanId,
+                amount: paymentData.amount,
+                method: paymentData.method,
+                notes: paymentData.notes,
+                isInterestOnly: isInterestOnlyPayment,
+                clientId: paymentData.clientId
+            });
+
+            // Update loans and clients with results from backend
+            await Promise.all([
+                updateLoan(result.loan),
+                updateClient(result.client)
+            ]);
+
+            setIsQuickPaymentModalOpen(false);
+        } catch (error: any) {
+            console.error("Error recording payment", error);
+            alert("Erro ao registrar pagamento");
+        }
+    };
+
     const handleDeletePayment = useCallback((paymentId: string) => {
         alert(`Estorno de pagamento (ID: ${paymentId}) ainda não implementado.`);
     }, []);
@@ -603,7 +315,7 @@ const App: React.FC = () => {
     useEffect(() => {
         document.documentElement.className = theme;
     }, [theme]);
-    
+
     const notifications = useMemo<Notification[]>(() => {
         const now = startOfDay(new Date());
         const alerts: Notification[] = [];
@@ -617,20 +329,20 @@ const App: React.FC = () => {
                 alerts.push({ id: `n-due-${loan.id}`, clientName: client.name, message: `Empréstimo vence em ${daysDiff} dia(s).`, type: 'warning' });
             }
         });
-        return alerts.sort((a,b) => (a.type === 'danger' ? -1 : 1));
+        return alerts.sort((a) => (a.type === 'danger' ? -1 : 1));
     }, [loansForView, clients]);
 
     const handleViewClient = (clientId: string) => {
         setSelectedClientId(clientId);
         setCurrentView('client-detail');
     };
-    
+
     const selectedClient = clients.find(c => c.id === selectedClientId);
 
     const renderView = () => {
         switch (currentView) {
             case 'dashboard':
-                return <DashboardView loans={loansForView} clients={clients} payments={payments} onViewLoans={(filter) => { setCurrentView('loans'); }} appName={appName} setAppName={setAppName} />;
+                return <DashboardView loans={loansForView} clients={clients} payments={payments} onViewLoans={() => { setCurrentView('loans'); }} appName={appName} setAppName={setAppName} />;
             case 'clients':
                 return <ClientsView clients={clients} onSelectClient={handleViewClient} onEditClient={setEditingClient} />;
             case 'client-detail':
@@ -640,7 +352,7 @@ const App: React.FC = () => {
             case 'reports':
                 return <ReportsView loans={loans} payments={payments} />;
             case 'settings':
-                return <SettingsView settings={settings} onSave={setSettings} clients={clients} loans={loans} onImportClients={() => setIsImportClientsModalOpen(true)} onImportLoans={() => setIsImportLoansModalOpen(true)} isGoogleConnected={isGoogleConnected} googleUserEmail={googleUserEmail} googleSheetId={googleSheetId} googleSheetName={googleSheetName} isAutoSyncEnabled={isAutoSyncEnabled} lastSyncTimestamp={lastSyncTimestamp} onGoogleLogout={handleGoogleLogout} onCreateGoogleSheet={handleCreateGoogleSheet} onSyncToSheet={handleSyncToSheet} onSyncFromSheet={handleSyncFromSheet} onToggleAutoSync={handleToggleAutoSync} />;
+                return <SettingsView settings={settings} onSave={setSettings} clients={clients} loans={loans} onImportClients={() => setIsImportClientsModalOpen(true)} onImportLoans={() => setIsImportLoansModalOpen(true)} />;
             default:
                 return <div>Página não encontrada</div>;
         }
@@ -650,8 +362,8 @@ const App: React.FC = () => {
         <div className={`flex h-screen font-sans ${theme}`}>
             <Sidebar currentView={currentView} setCurrentView={setCurrentView} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <Header 
-                    onAddClientClick={() => setIsAddClientModalOpen(true)} 
+                <Header
+                    onAddClientClick={() => setIsAddClientModalOpen(true)}
                     onAddLoanClick={() => setIsAddLoanModalOpen(true)}
                     onQuickPaymentClick={() => setIsQuickPaymentModalOpen(true)}
                     onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
