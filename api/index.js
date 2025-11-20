@@ -383,6 +383,53 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Test Registration Endpoint
+app.post('/api/test-register', async (req, res) => {
+    try {
+        const { email, password, name } = req.body;
+
+        console.log('Test register attempt:', { email, name });
+
+        // Test 1: Can we hash the password?
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = await bcrypt.hash(password || 'test123', 10);
+        console.log('✅ Password hashed');
+
+        // Test 2: Can we create a user?
+        const user = await prisma.user.create({
+            data: {
+                email: (email || `test-${Date.now()}@example.com`).toLowerCase(),
+                password: hashedPassword,
+                name: name || 'Test User'
+            }
+        });
+        console.log('✅ User created:', user.id);
+
+        // Test 3: Can we generate JWT?
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign(
+            { userId: user.id, email: user.email, name: user.name },
+            process.env.JWT_SECRET || 'fallback-secret',
+            { expiresIn: '7d' }
+        );
+        console.log('✅ JWT generated');
+
+        res.json({
+            status: 'success',
+            userId: user.id,
+            tokenLength: token.length
+        });
+    } catch (error) {
+        console.error('Test register error:', error);
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+    }
+});
+
 // Inspect URL byte-by-byte
 app.get('/api/inspect-url', (req, res) => {
     const dbUrl = process.env.TURSO_DATABASE_URL;
