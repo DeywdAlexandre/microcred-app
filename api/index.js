@@ -383,6 +383,21 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
+// Simple Test Endpoint (no Prisma)
+app.get('/api/test-env', (req, res) => {
+    res.json({
+        status: 'online',
+        nodeEnv: process.env.NODE_ENV,
+        hasTursoUrl: !!process.env.TURSO_DATABASE_URL,
+        tursoUrlLength: process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.length : 0,
+        tursoUrlStart: process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.substring(0, 20) : null,
+        hasTursoToken: !!process.env.TURSO_AUTH_TOKEN,
+        tursoTokenLength: process.env.TURSO_AUTH_TOKEN ? process.env.TURSO_AUTH_TOKEN.length : 0,
+        hasJwtSecret: !!process.env.JWT_SECRET,
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('TURSO') || k.includes('JWT') || k.includes('FRONTEND'))
+    });
+});
+
 // Debug Endpoint
 app.get('/api/debug-status', async (req, res) => {
     try {

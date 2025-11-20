@@ -1,0 +1,14 @@
+# Variáveis de ambiente locais (desenvolvimento)
+PORT=8080
+FRONTEND_URL=http://localhost:5173
+
+# Turso Database (Produção)
+TURSO_DATABASE_URL="libsql://microcred-deywdalexandre.aws-us-east-2.turso.io"
+TURSO_AUTH_TOKEN="eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjM2Mzc3ODAsImlkIjoiNjEyYTYwODItYWUwZS00YTNhLTg5YzgtYzVhYWRkY2RlOGY0IiwicmlkIjoiMGY0NmZiNGMtMTg0ZC00M2Q3LWFiYzUtOWE1MDU3ZTQ4MzgwIn0.QH73u-ejqhAoem2J3QdT4w4w4s_8UPl2L7qbBBjUaMap0e2SWYSB6ohoAqBd7T2sigxGhz_HkAtUx5I8B5QrCg"
+
+# Prisma usa SQLite local para migrations
+DATABASE_URL="file:./prisma/dev.db"
+
+# JWT Authentication
+JWT_SECRET="microcred-super-secret-key-2024-change-in-production"
+JWT_EXPIRES_IN="7d"
