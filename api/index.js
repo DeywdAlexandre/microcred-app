@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const prisma = require('./prisma');
+const authRoutes = require('./routes/auth');
+const authMiddleware = require('./middleware/auth');
 
 dotenv.config();
 
@@ -23,12 +25,16 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
-// --- Database Routes ---
+// Auth routes (public)
+app.use('/api/auth', authRoutes);
+
+// --- Database Routes (Protected) ---
 
 // Clients
-app.get('/api/clients', async (req, res) => {
+app.get('/api/clients', authMiddleware, async (req, res) => {
     try {
         const clients = await prisma.client.findMany({
+            where: { userId: req.user.id },
             include: {
                 scoreHistory: true
             }
@@ -39,11 +45,12 @@ app.get('/api/clients', async (req, res) => {
     }
 });
 
-app.post('/api/clients', async (req, res) => {
+app.post('/api/clients', authMiddleware, async (req, res) => {
     try {
         const { scoreHistory, ...clientData } = req.body;
         const data = {
             ...clientData,
+            userId: req.user.id,
             registrationDate: clientData.registrationDate ? new Date(clientData.registrationDate) : new Date(),
             scoreHistory: scoreHistory && scoreHistory.length > 0 ? {
                 create: scoreHistory.map(sh => ({
@@ -64,9 +71,15 @@ app.post('/api/clients', async (req, res) => {
     }
 });
 
-app.put('/api/clients/:id', async (req, res) => {
+app.put('/api/clients/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
+        // Verify ownership
+        const existing = await prisma.client.findFirst({ where: { id, userId: req.user.id } });
+        if (!existing) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
+
         const { scoreHistory, ...clientData } = req.body;
 
         // Delete existing score history
@@ -95,9 +108,14 @@ app.put('/api/clients/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/clients/:id', async (req, res) => {
+app.delete('/api/clients/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
+        // Verify ownership before deleting
+        const existing = await prisma.client.findFirst({ where: { id, userId: req.user.id } });
+        if (!existing) {
+            return res.status(404).json({ error: 'Client not found' });
+        }
         await prisma.client.delete({ where: { id } });
         res.json({ message: 'Client deleted' });
     } catch (error) {
@@ -106,9 +124,10 @@ app.delete('/api/clients/:id', async (req, res) => {
 });
 
 // Loans
-app.get('/api/loans', async (req, res) => {
+app.get('/api/loans', authMiddleware, async (req, res) => {
     try {
         const loans = await prisma.loan.findMany({
+            where: { userId: req.user.id },
             include: {
                 paymentSchedule: true,
                 renewalHistory: true
@@ -120,11 +139,12 @@ app.get('/api/loans', async (req, res) => {
     }
 });
 
-app.post('/api/loans', async (req, res) => {
+app.post('/api/loans', authMiddleware, async (req, res) => {
     try {
         const { paymentSchedule, renewalHistory, paymentHistory, ...loanData } = req.body;
         const data = {
             ...loanData,
+            userId: req.user.id,
             startDate: loanData.startDate ? new Date(loanData.startDate) : new Date(),
             dueDate: loanData.dueDate ? new Date(loanData.dueDate) : null,
             paymentSchedule: paymentSchedule && paymentSchedule.length > 0 ? {
@@ -145,9 +165,15 @@ app.post('/api/loans', async (req, res) => {
     }
 });
 
-app.put('/api/loans/:id', async (req, res) => {
+app.put('/api/loans/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
+        // Verify ownership
+        const existing = await prisma.loan.findFirst({ where: { id, userId: req.user.id } });
+        if (!existing) {
+            return res.status(404).json({ error: 'Loan not found' });
+        }
+
         const { paymentSchedule, renewalHistory, paymentHistory, ...loanData } = req.body;
 
         const data = {
@@ -167,9 +193,14 @@ app.put('/api/loans/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/loans/:id', async (req, res) => {
+app.delete('/api/loans/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
+        // Verify ownership
+        const existing = await prisma.loan.findFirst({ where: { id, userId: req.user.id } });
+        if (!existing) {
+            return res.status(404).json({ error: 'Loan not found' });
+        }
         await prisma.loan.delete({ where: { id } });
         res.json({ message: 'Loan deleted' });
     } catch (error) {
@@ -178,20 +209,23 @@ app.delete('/api/loans/:id', async (req, res) => {
 });
 
 // Payments
-app.get('/api/payments', async (req, res) => {
+app.get('/api/payments', authMiddleware, async (req, res) => {
     try {
-        const payments = await prisma.payment.findMany();
+        const payments = await prisma.payment.findMany({
+            where: { userId: req.user.id }
+        });
         res.json(payments);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch payments', details: error.message });
     }
 });
 
-app.post('/api/payments', async (req, res) => {
+app.post('/api/payments', authMiddleware, async (req, res) => {
     try {
         const { date, ...paymentData } = req.body;
         const data = {
             ...paymentData,
+            userId: req.user.id,
             date: date ? new Date(date) : new Date()
         };
         const payment = await prisma.payment.create({
@@ -205,18 +239,20 @@ app.post('/api/payments', async (req, res) => {
 });
 
 // Process Payment with Business Logic (calculates balance, updates loan status, updates client score)
-app.post('/api/payments/process', async (req, res) => {
+app.post('/api/payments/process', authMiddleware, async (req, res) => {
     try {
         const { loanId, amount, method, notes, isInterestOnly, clientId } = req.body;
 
-        // 1. Get Loan and Client
-        const loan = await prisma.loan.findUnique({ where: { id: loanId } });
+        // 1. Get Loan and Client (verify ownership)
+        const loan = await prisma.loan.findFirst({
+            where: { id: loanId, userId: req.user.id }
+        });
         if (!loan) {
             return res.status(404).json({ error: 'Loan not found' });
         }
 
-        const client = await prisma.client.findUnique({
-            where: { id: clientId || loan.clientId },
+        const client = await prisma.client.findFirst({
+            where: { id: clientId || loan.clientId, userId: req.user.id },
             include: { scoreHistory: true }
         });
         if (!client) {
@@ -228,6 +264,7 @@ app.post('/api/payments/process', async (req, res) => {
             data: {
                 loanId,
                 clientId: client.id,
+                userId: req.user.id,
                 date: new Date(),
                 amount: parseFloat(amount),
                 method,

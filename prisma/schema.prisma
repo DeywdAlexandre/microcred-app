@@ -10,8 +10,22 @@ datasource db {
   provider = "sqlite"
 }
 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  
+  clients   Client[]
+  loans     Loan[]
+  payments  Payment[]
+}
+
 model Client {
   id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
   phone           String?
   email           String?
@@ -27,6 +41,8 @@ model Client {
 
 model Loan {
   id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId         String
   client           Client    @relation(fields: [clientId], references: [id])
   type             String    // "single" or "installments"
@@ -45,6 +61,8 @@ model Loan {
 
 model Payment {
   id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   loanId          String
   loan            Loan      @relation(fields: [loanId], references: [id])
   clientId        String

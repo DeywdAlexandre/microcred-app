@@ -1,6 +1,9 @@
 
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 // Fix: Add .ts extension
 import { Client, Loan, Payment, AppView, LoanType, LoanStatus, Settings, Notification } from '@/types.ts';
 // Fix: Add .tsx extension
@@ -47,9 +50,23 @@ const LOCAL_STORAGE_KEYS = {
     appName: 'microcred_appName',
 };
 
+// Protected Route Component
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    const { user, isLoading } = useAuth();
 
+    if (isLoading) {
+        return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    }
 
-const App: React.FC = () => {
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
+    return <>{children}</>;
+};
+
+const MainApp: React.FC = () => {
+    const { logout } = useAuth();
     // Use custom hooks for data management
     const { clients, loadClients, addClient, updateClient, importClients } = useClients();
     const { loans, loadLoans, addLoan, updateLoan, deleteLoan, importLoans } = useLoans();
@@ -371,6 +388,7 @@ const App: React.FC = () => {
                     onThemeToggle={handleThemeToggle}
                     currentView={currentView}
                     setCurrentView={setCurrentView}
+                    onLogout={logout}
                 />
                 <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 p-4 sm:p-6">
                     {renderView()}
@@ -385,6 +403,24 @@ const App: React.FC = () => {
             {isImportLoansModalOpen && <ImportLoansModal isOpen={isImportLoansModalOpen} onClose={() => setIsImportLoansModalOpen(false)} onImport={handleImportLoans} />}
             {isNotificationsOpen && <NotificationsPopover notifications={notifications} onClose={() => setIsNotificationsOpen(false)} />}
         </div>
+    );
+};
+
+const App: React.FC = () => {
+    return (
+        <BrowserRouter>
+            <AuthProvider>
+                <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/*" element={
+                        <ProtectedRoute>
+                            <MainApp />
+                        </ProtectedRoute>
+                    } />
+                </Routes>
+            </AuthProvider>
+        </BrowserRouter>
     );
 };
 
