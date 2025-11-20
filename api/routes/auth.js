@@ -62,7 +62,11 @@ router.post('/register', async (req, res) => {
         });
     } catch (error) {
         console.error('Register error:', error);
-        res.status(500).json({ error: 'Failed to register user' });
+        res.status(500).json({
+            error: 'Failed to register user',
+            details: error.message,
+            stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+        });
     }
 });
 
