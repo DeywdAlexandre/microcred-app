@@ -6,10 +6,11 @@
   "main": "api/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "prisma generate && vite build",
     "preview": "vite preview",
     "start": "concurrently \"npm run dev\" \"node dev-server.js\"",
-    "vercel-build": "prisma generate && vite build"
+    "vercel-build": "prisma generate && vite build",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
